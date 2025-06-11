@@ -51,9 +51,13 @@ class Reference:
         }
 
 
+# CrossRef API
+CROSSREF_API = 'https://api.crossref.org/works'
+
+
 def extract_metadata_deepseek(raw_reference: str) -> dict:
     """
-    使用 DeepSeek 模型调用接口进行中文参考文献结构化抽取（兼容 OpenAI Python SDK 0.8）。
+    使用 DeepSeek 模型调用接口进行中文参考文献结构化抽取。
     """
     prompt = f"""
 你是一个文献解析助手，请从下面这条参考文献中提取以下字段，并返回标准 JSON 格式：
@@ -71,27 +75,29 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
 - ref_type（文献类型，如 journal/book/web/conference）
 - doi（数字对象唯一标识符）
 
-请直接以 JSON 形式输出（不要有多余的解释文字）
-
 参考文献：
 {raw_reference}
 """
     try:
-        response = openai.ChatCompletion.create(
-            model="deepseek-chat",
+        client = openai.OpenAI(
             api_key=openai.api_key,
-            base_url='https://api.deepseek.com/v1',
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3
+            base_url='https://api.deepseek.com/v1'  # 添加/v1路径
         )
-        reply = response['choices'][0]['message']['content']
-        return json.loads(reply)
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            response_format={"type": "json_object"}  # 确保返回JSON格式
+        )
+
+        # 正确访问响应对象的方式（使用属性而不是下标）
+        reply = response.choices[0].message.content
+
+        return json.loads(reply)  # 使用json模块解析
     except Exception as e:
         print(f"DeepSeek 解析失败：{e}")
         return {}
 
-# CrossRef API
-CROSSREF_API = 'https://api.crossref.org/works'
 
 def fetch_crossref_metadata(query: str) -> dict:
     try:
@@ -135,4 +141,3 @@ def parse_references_bulk(text_block: str) -> List[Reference]:
             results.append(parse_reference(line))
         except Exception:
             results.append(Reference(line))
-    return results
