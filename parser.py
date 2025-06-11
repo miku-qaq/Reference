@@ -3,8 +3,6 @@ from typing import List
 import openai
 import json  # 添加json模块
 
-from sympy.physics.units import volume
-
 # 设置 DeepSeek API
 openai.api_key = "sk-4a9e01274c4f48dbafa94c2c04b32a30"  # 请替换成您自己的有效API Key
 
