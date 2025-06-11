@@ -144,6 +144,11 @@ def parse_reference(raw: str) -> Reference:
         if meta.get(field):
             setattr(ref, field, meta[field])
 
+    has_empty = any(value == '' for value in vars(ref).values())
+    if not has_empty:
+        return ref
+
+    # 如果 DeepSeek 解析失败，则使用 CrossRef API 进行查询
     if ref.doi:
         cr_meta = fetch_crossref_by_doi(ref.doi)
     else:
