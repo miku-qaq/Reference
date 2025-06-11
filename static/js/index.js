@@ -129,12 +129,12 @@ function format_apa_js(ref) {
     parts.push(`${title}.`);
 
     if (ref.ref_type === 'journal') {
-        if (ref.venue) parts.push(`*${ref.venue}*,`); // 期刊名斜体
+        if (ref.venue) parts.push(`${ref.venue},`); // 期刊名斜体
         if (ref.volume) {
             if (ref.issue) {
-                parts.push(`*${ref.volume}*(${ref.issue}),`);
+                parts.push(`${ref.volume}(${ref.issue}),`);
             } else {
-                parts.push(`*${ref.volume}*,`);
+                parts.push(`${ref.volume},`);
             }
         }
         if (ref.pages) parts.push(`${ref.pages}.`);

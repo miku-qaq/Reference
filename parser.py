@@ -3,6 +3,8 @@ from typing import List
 import openai
 import json  # 添加json模块
 
+from sympy.physics.units import volume
+
 # 设置 DeepSeek API
 openai.api_key = "sk-4a9e01274c4f48dbafa94c2c04b32a30"  # 请替换成您自己的有效API Key
 
@@ -99,9 +101,22 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
         return {}
 
 
-def fetch_crossref_metadata(query: str) -> dict:
+def fetch_crossref_metadata(title='', authors='', venue='', publisher='', year='') -> dict:
     try:
-        params = {'query.bibliographic': query, 'rows': 1}
+        params = {}
+        if title:
+            params['query.title'] = title
+        if authors:
+            params['query.author'] = authors
+        if venue:
+            params['query.container-title'] = venue
+        if publisher:
+            params['query.publisher-name'] = publisher
+        if year:
+            params['filter'] = f"from-pub-date:{year},until-pub-date:{year}"
+
+        params['rows'] = 1  # 只取最相关的1条
+
         r = requests.get(CROSSREF_API, params=params, timeout=10)
         r.raise_for_status()
         items = r.json().get('message', {}).get('items', [])
@@ -111,26 +126,77 @@ def fetch_crossref_metadata(query: str) -> dict:
         pass
     return {}
 
+
+def fetch_crossref_by_doi(doi: str) -> dict:
+    try:
+        url = f"https://api.crossref.org/works/{doi}"
+        r = requests.get(url, timeout=10)
+        r.raise_for_status()
+        return r.json().get('message', {})
+    except Exception:
+        return {}
+
+
 def parse_reference(raw: str) -> Reference:
     ref = Reference(raw)
     meta = extract_metadata_deepseek(ref.raw)
     for field in ['authors', 'year', 'title', 'venue', 'volume', 'issue', 'pages', 'pubplace', 'publisher', 'access_date', 'url', 'ref_type', 'doi']:
         if meta.get(field):
             setattr(ref, field, meta[field])
-    if not ref.doi and ref.title:
-        query_str = ' '.join(filter(None, [ref.title, ref.authors, ref.year]))
-        cr_meta = fetch_crossref_metadata(query_str)
-        if cr_meta:
+
+    if ref.doi:
+        cr_meta = fetch_crossref_by_doi(ref.doi)
+    else:
+        #查询
+        cr_meta = fetch_crossref_metadata(
+            title=ref.title,
+            authors=ref.authors,
+            venue=ref.venue,
+            publisher=ref.publisher,
+            year=ref.year
+        )
+
+    if cr_meta:
+        # DOI 直接是字符串，不要当列表处理
+        if not ref.doi:
             ref.doi = cr_meta.get('DOI', '')
-            if not ref.authors:
-                ref.authors = ', '.join(f"{p.get('family','')} {p.get('given','')}" for p in cr_meta.get('author', []))
-            if not ref.venue:
-                ref.venue = (cr_meta.get('container-title') or [''])[0]
-            if not ref.year:
-                dates = cr_meta.get('issued', {}).get('date-parts', [[None]])
-                ref.year = str(dates[0][0]) if dates[0][0] else ''
-            if not ref.title:
-                ref.title = (cr_meta.get('title') or [''])[0]
+
+        # 作者列表正常拼接
+        if not ref.authors:
+            ref.authors = ', '.join(
+                f"{p.get('family', '')} {p.get('given', '')}".strip()
+                for p in cr_meta.get('author', [])
+            )
+
+        # 期刊/会议名是列表，取第一个
+        if not ref.venue:
+            ref.venue = (cr_meta.get('container-title') or [''])[0]
+
+        # 出版年份
+        if not ref.year:
+            dates = cr_meta.get('issued', {}).get('date-parts', [[None]])
+            ref.year = str(dates[0][0]) if dates[0][0] else ''
+
+        # 标题也是列表，取第一个
+        if not ref.title:
+            ref.title = (cr_meta.get('title') or [''])[0]
+
+        # publisher 是字符串
+        if not ref.publisher:
+            ref.publisher = cr_meta.get('publisher', '')
+
+        # volume/issue/page 都是字符串
+        if not ref.volume:
+            ref.volume = cr_meta.get('volume', '')
+        if not ref.issue:
+            ref.issue = cr_meta.get('issue', '')
+        if not ref.pages:
+            ref.pages = cr_meta.get('page', '')
+
+        # URL 也是字符串
+        if not ref.url:
+            ref.url = cr_meta.get('URL', '')
+
     return ref
 
 def parse_references_bulk(text_block: str) -> List[Reference]:
