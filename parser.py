@@ -102,7 +102,7 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
 def fetch_crossref_metadata(query: str) -> dict:
     try:
         params = {'query.bibliographic': query, 'rows': 1}
-        r = requests.get(CROSSREF_API, params=params, timeout=10)
+        r = requests.get(CROSSREF_API, params=params, timeout=30)
         r.raise_for_status()
         items = r.json().get('message', {}).get('items', [])
         if items:
