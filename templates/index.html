@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>参考文献自动解析与格式标准化系统</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Link to external stylesheet -->
+    <link rel="stylesheet" href="/static/css/index.css">
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+    <div class="container mx-auto max-w-4xl bg-white p-6 sm:p-8 lg:p-10 rounded-xl shadow-lg relative">
+        <h2 class="text-3xl font-bold text-center text-gray-800 mb-8">参考文献自动解析与格式标准化系统</h2>
+
+        <!-- 解析参考文献表单 -->
+        <form id="referenceForm" class="space-y-6" method="post" enctype="multipart/form-data">
+            <div>
+                <label for="file" class="block text-sm font-medium text-gray-700 mb-2">上传参考文献文件（TXT）：</label>
+                <input type="file" name="file" id="file" accept=".txt" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer rounded-lg border border-gray-300">
+            </div>
+
+            <div>
+                <label for="references" class="block text-sm font-medium text-gray-700 mb-2">或在此输入（每条一行，文件和输入同时解析，支持APA，GB/T，IEEE标准格式）：</label>
+                <textarea name="references" id="references" rows="8" class="block w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400 text-base resize-y" placeholder="例：Smith J., Chen L. Deep Learning ... DOI:10.xxx..."></textarea>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4">
+                <span class="text-sm font-medium text-gray-700">选择输出格式：</span>
+                <div class="inline-flex rounded-full shadow-sm style-button-group flex-1" role="group">
+                    <button type="button" data-style="gbt7714" class="style-button py-2 px-5 text-sm font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 focus:z-10 focus:ring-2 focus:ring-blue-500 rounded-l-full border border-blue-200">GB/T 7714</button>
+                    <button type="button" data-style="apa" class="style-button py-2 px-5 text-sm font-medium text-gray-900 bg-white hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-blue-500 border-t border-b border-gray-200">APA</button>
+                    <button type="button" data-style="ieee" class="style-button py-2 px-5 text-sm font-medium text-gray-900 bg-white hover:bg-gray-100 focus:z-10 focus:ring-2 focus:ring-blue-500 rounded-r-full border border-gray-200">IEEE</button>
+                </div>
+                <!-- Hidden input to send selected style to backend on form submission (though now only initial GET uses it) -->
+                <input type="hidden" name="style" id="selectedStyleHiddenInput" value="gbt7714">
+                <button type="submit" id="parseButton" class="ml-auto py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 transition duration-200 ease-in-out">解析参考文献</button>
+            </div>
+        </form>
+
+        <!-- 导出部分 -->
+        <div class="export-section mt-8 pt-6 border-t border-gray-200 flex justify-end items-center gap-4">
+            <form id="exportForm">
+                <label for="export_type" class="text-sm font-medium text-gray-700">导出为：</label>
+                <select name="export_type" id="export_type" class="px-3 py-2 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-gray-900 text-sm">
+                    <option value="txt">TXT 文本</option>
+                    <option value="latex">LaTeX 文件</option>
+                </select>
+                <button type="submit" id="exportButton" class="ml-4 py-2 px-6 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-75 transition duration-200 ease-in-out">导出</button>
+            </form>
+        </div>
+
+        <!-- 解析结果显示部分 -->
+        <div class="results mt-10">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">
+                解析结果：
+                <span id="duplicate-notice" class="ml-2 text-red-500 text-sm font-normal hidden">检测到重复引用，已自动去重</span>
+                <!-- 加载动画/文本提示 -->
+                <span id="loading-indicator" class="ml-4 text-blue-500 text-sm font-normal hidden">请等待... <span class="animate-pulse">◌</span></span>
+            </h3>
+            <div id="resultsList" class="space-y-3">
+                <!-- Results will be dynamically inserted here -->
+            </div>
+            <!-- Message box for alerts -->
+            <div id="message-box" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
+                <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+                    <h4 class="text-lg font-bold mb-4" id="message-title"></h4>
+                    <p class="text-gray-700 mb-6" id="message-content"></p>
+                    <div class="text-right">
+                        <button id="message-close" class="py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none">确定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Link to external JavaScript file -->
+    <script src="/static/js/index.js"></script>
+    <script>
+        // 在页面加载时，从 Flask 模板上下文中初始化全局变量
+        // 这些变量只在首次加载页面时有效，后续数据通过异步请求更新
+        const initialRawInput = `{{ raw_input | default('') }}`;
+        if (initialRawInput) {
+            document.getElementById('references').value = initialRawInput;
+        }
+
+        currentStyle = '{{ style | default("gbt7714") }}'; // 设置初始样式按钮
+
+        // 设置初始激活的样式按钮
+        document.querySelectorAll('.style-button').forEach(btn => {
+            if (btn.dataset.style === currentStyle) {
+                btn.classList.add('bg-blue-100', 'text-blue-700', 'border-blue-200');
+                btn.classList.remove('bg-white', 'text-gray-900', 'border-gray-200');
+            } else {
+                btn.classList.add('bg-white', 'text-gray-900', 'border-gray-200');
+                btn.classList.remove('bg-blue-100', 'text-blue-700', 'border-blue-200');
+            }
+        });
+
+        // 注意：由于现在解析是异步的，不再在HTML中直接传递 parsedReferences 和 duplicatesExist。
+        // 这些数据将由 JavaScript 在接收到后端响应后动态设置。
+    </script>
+</body>
+</html>

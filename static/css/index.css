@@ -1,0 +1,41 @@
+/* static/css/style.css */
+
+/* 设置body的默认字体和背景颜色 */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f0f4f8; /* 浅蓝灰色背景 */
+}
+
+/* 结果项的渐入动画 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); } /* 从透明、略微向下开始 */
+    to { opacity: 1; transform: translateY(0); } /* 到完全不透明、原始位置 */
+}
+.result-item {
+    animation: fadeIn 0.5s ease-in-out; /* 应用渐入动画 */
+}
+
+/* 用于隐藏元素的渐出动画 */
+.animate-fade-out {
+    animation: fadeOut 0.5s forwards; /* 应用渐出动画，并保持最终状态 */
+}
+@keyframes fadeOut {
+    from { opacity: 1; } /* 从完全不透明开始 */
+    to { opacity: 0; } /* 到完全透明 */
+}
+
+/* 确保按钮组内的按钮具有相同的宽度 */
+.style-button-group .style-button {
+    flex-grow: 1; /* 允许按钮增长以填充可用空间 */
+    flex-basis: 0; /* 确保空间平均分配给每个按钮 */
+    min-width: 0; /* 防止内容溢出，确保在小屏幕下也能正确收缩 */
+}
+
+/* 加载指示器特有的脉冲动画 */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.animate-pulse {
+    animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; /* 脉冲动画，无限循环 */
+}
