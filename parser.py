@@ -90,7 +90,8 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
         print(f"DeepSeek 解析失败：{e}")
         return {}
 
-
+# CrossRef API
+CROSSREF_API = 'https://api.crossref.org/works'
 
 def fetch_crossref_metadata(query: str) -> dict:
     try:
