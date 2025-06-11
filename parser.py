@@ -141,4 +141,4 @@ def parse_references_bulk(text_block: str) -> List[Reference]:
             results.append(parse_reference(line))
         except Exception:
             results.append(Reference(line))
-
+    return results
