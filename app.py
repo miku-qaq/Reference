@@ -1,11 +1,9 @@
 # app.py
-import json
 from flask import Flask, render_template, request, jsonify
-import io  # 保留io导入，以防其他未展示部分需要，但当前代码逻辑中未直接使用。
 
 # 从 parser.py 文件中导入 Reference 类和解析函数
 # 假设 parser.py 位于与 app.py 同级的目录中
-from parser import Reference, parse_references_bulk
+from parser import parse_references_bulk
 
 app = Flask(__name__)
 
@@ -33,9 +31,7 @@ def api_parse_references():
     接收用户输入的文本和上传的文件，调用后端解析器进行处理，
     然后返回结构化数据（JSON格式）给前端。
     """
-    raw_input_content = ''
     duplicates_found = False
-    parsed_references_dicts = []
 
     # --- 1. 处理文件上传 ---
     file = request.files.get('file')
@@ -101,8 +97,6 @@ def api_parse_references():
         'duplicates_exist': duplicates_found  # 是否存在重复的标志，供前端显示去重提示
     })
 
-
-# /export 路由现在不再需要，因为导出功能已完全在前端JavaScript中实现。
 
 if __name__ == '__main__':
     # 启动 Flask 应用
