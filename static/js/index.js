@@ -267,8 +267,10 @@ function format_gbt7714_js(ref) {
         if (ref.doi) parts.push(`DOI:${ref.doi}.`);
     } else if (ref.ref_type === 'conference') {
         if (ref.venue) parts.push(`${ref.venue},`);
-        if (ref.year) parts.push(`${ref.year}:`);
-        if (ref.pages) parts.push(`${ref.pages}.`);
+        if (ref.year) parts.push(`${ref.year}`);
+        if (ref.pages)
+            parts.push(`:${ref.pages}.`);
+        else parts.push(`.`);
         if (ref.doi) parts.push(`DOI:${ref.doi}.`);
     } else if (ref.ref_type === 'book') {
         if (ref.pubplace && ref.publisher) {
@@ -351,7 +353,13 @@ function format_apa_js(ref) {
         if (ref.pages) parts.push(`${ref.pages}.`);
         if (ref.doi) parts.push(`https://doi.org/${ref.doi}`);
     } else if (ref.ref_type === 'conference') {
-        if (ref.venue) parts.push(`In ${ref.venue} (pp. ${ref.pages || 'N/A'}).`);
+        if (ref.venue) {
+            parts.push(`In ${ref.venue} `);
+            if (!ref.pages)
+                parts.push('.')
+        }
+        if(ref.pages)
+            parts.push(`(pp. ${ref.pages}).`);
         if (ref.doi) parts.push(`https://doi.org/${ref.doi}`);
         else if (ref.url) parts.push(ref.url);
     } else if (ref.ref_type === 'book') {
@@ -463,7 +471,6 @@ function format_ieee_js(ref) {
  */
 function formatReference(ref, style) {
     authors = formatAuthors(ref.authors);
-    console.log(authors);
     switch (style) {
         case 'gbt7714':
             return format_gbt7714_js(ref);
@@ -605,7 +612,8 @@ exportForm.addEventListener('submit', (event) => {
         // 为LaTeX文件生成一个非常基本的biblio环境
         const latexEntries = currentFormattedReferences.map((ref, index) => {
             // 对LaTeX特殊字符进行简单转义
-            const escapedRef = ref.replace(/&/g, '\\&')
+            const escapedRef = ref.replace(/\\/g, '\\textbackslash{}')
+                                .replace(/&/g, '\\&')
                                 .replace(/%/g, '\\%')
                                 .replace(/\$/g, '\\$')
                                 .replace(/#/g, '\\#')
@@ -613,8 +621,7 @@ exportForm.addEventListener('submit', (event) => {
                                 .replace(/{/g, '\\{')
                                 .replace(/}/g, '\\}')
                                 .replace(/~/g, '\\textasciitilde{}')
-                                .replace(/\^/g, '\\textasciicircum{}')
-                                .replace(/\\/g, '\\textbackslash{}'); // 处理反斜杠本身
+                                .replace(/\^/g, '\\textasciicircum{}'); // 处理反斜杠本身
 
             return `\\bibitem{ref${index + 1}}{${escapedRef}}`; // 生成 \bibitem 条目
         }).join('\n\n'); // 条目之间用双换行符分隔
@@ -624,6 +631,7 @@ exportForm.addEventListener('submit', (event) => {
 \\usepackage[utf8]{inputenc}
 \\usepackage{hyperref} % 可选: 用于超链接
 \\usepackage{url}      % 可选: 用于URL
+\\usepackage{xeCJK}
 \\begin{document}
 
 \\section*{参考文献}

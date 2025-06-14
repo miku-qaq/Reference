@@ -96,7 +96,6 @@ First Name 和 Middle Name采用首字符大写加.的格式。
 
         # 正确访问响应对象的方式（使用属性而不是下标）
         reply = response.choices[0].message.content
-        print(json.loads(reply))
         return json.loads(reply)  # 使用json模块解析
     except Exception as e:
         print(f"DeepSeek 解析失败：{e}")

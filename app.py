@@ -86,7 +86,6 @@ def api_parse_references():
         parsed_references_dicts = []
         duplicates_found = False
 
-    print("处理完成！")
     # --- 5. 返回 JSON 格式的响应 ---
     # jsonify 会自动将Python字典转换为JSON字符串，并设置HTTP响应头 Content-Type: application/json
     return jsonify({
