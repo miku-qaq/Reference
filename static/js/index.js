@@ -5,6 +5,10 @@ let parsedReferences = [];
 // 全局变量，用于存储当前显示或即将导出的格式化参考文献字符串列表
 let currentFormattedReferences = [];
 
+// 全局变量，用于存储当前作者对象列表
+let authors = [];
+
+
 // 全局变量，表示当前选择的参考文献格式（默认为GB/T 7714）
 // 该值会在用户点击格式按钮时更新，并可能从Flask模板中初始化
 let currentStyle = 'gbt7714';
@@ -39,17 +43,156 @@ function showMessageBox(title, message) {
 }
 
 /**
- * 将作者列表格式化为字符串，以逗号分隔。
- * 如果作者列表为空，则返回“佚名”。
- * @param {Array<string>} authors_list - 作者姓名数组。
- * @returns {string} 格式化后的作者字符串。
+ * 检查一个字符是否为中文字符。
+ * @param {string} char - 要检查的字符。
+ * @returns {boolean} 如果是中文字符则返回 true，否则返回 false。
  */
-function formatAuthors(authors_list) {
-    if (!authors_list || authors_list.length === 0) {
-        return '佚名';
-    }
-    return authors_list.join(', ');
+function isChinese(char) {
+    return /[\u4e00-\u9fa5]/.test(char);
 }
+
+
+/**
+ * 使用 pinyin-pro 库将中文姓名转换为拼音。
+ * 重要提示：此函数依赖于本地的 `pinyin-pro` 库（index.min.js）。
+ *
+ * @param {string} chineseName - 中文姓名字符串。
+ * @returns {object} 包含 `last` (姓的拼音) 和 `first` (名的拼音) 的对象。
+ */
+function convertToPinyin(chineseName) {
+    // 检查 pinyin-pro 库是否已加载
+    if (typeof window.pinyinPro === 'undefined' || typeof window.pinyinPro.pinyin !== 'function') {
+        console.error("Error: pinyin-pro 库未加载，无法转换拼音。");
+        return { last: '', first: '' };
+    }
+
+    // 调用 pinyin-pro, mode: 'surname' 确保第一个是姓
+    const arr = window.pinyinPro.pinyin(chineseName, {
+        toneType: "none",
+        type: "array",
+        mode: "surname"
+    });
+
+    let last = '';
+    let first = '';
+
+    if (arr.length > 0) {
+        last = arr[0] || '';
+        if (arr.length > 1) {
+            first = arr.slice(1).join('');
+        }
+    }
+
+    return {
+        last: last.toLowerCase(),
+        first: first.toLowerCase()
+    };
+}
+
+
+/**
+ * 解析单个作者字符串（英文或中文）为结构化组件。
+ * 保留原有的首字母大写、缩写和中间名处理规则。
+ *
+ * @param {string} authorString - 单个作者的原始字符串（例如 'M. Aspelmeyer' 或 '张三'）。
+ * @returns {object} 包含以下属性的对象：
+ *   - chineseName: 如果是中文名，则为原始中文名字符串，否则为空字符串。
+ *   - LastName: 首字母大写的姓氏（中文为拼音，英文则从英文名中提取）。
+ *   - FirstName: 首字母大写后的名字/缩写（中文为拼音，英文则从英文名中提取）。
+ *   - MiddleName: 首字母大写后的中间名缩写（如果存在，否则为空字符串）。
+ */
+function parseAuthor(authorString) {
+    const trimmedAuthor = authorString.trim();
+    let result = {
+        chineseName: '',
+        LastName: '',
+        FirstName: '',
+        MiddleName: '' // 默认为空字符串，在英文名解析时可能被填充
+    };
+
+    if (trimmedAuthor === '') {
+        return result;
+    }
+
+    // 检查是否包含中文字符，判断为中文名
+    if (isChinese(trimmedAuthor.charAt(0))) {
+        result.chineseName = trimmedAuthor;
+        const pinyin = convertToPinyin(trimmedAuthor);
+
+        // 拼音转换后的姓和名首字母大写
+        result.LastName = pinyin.last
+            ? pinyin.last.charAt(0).toUpperCase() + pinyin.last.slice(1)
+            : '';
+        result.FirstName = pinyin.first
+            ? pinyin.first.charAt(0).toUpperCase() + '.'
+            : '';
+    } else {
+        // 处理英文名格式：通常为 First Middle Last 或 F. M. Last
+        const parts = trimmedAuthor.split(' ').filter(p => p !== '');
+
+        if (parts.length === 0) {
+            return result;
+        }
+
+        // 最后一个部分通常是姓氏
+        result.LastName = parts.pop();
+        result.LastName = result.LastName.charAt(0).toUpperCase() + result.LastName.slice(1);
+
+        // 处理剩余的部分作为名字 (FirstName 和 MiddleName)
+        let remainingNameParts = parts;
+
+        // 如果剩余部分多于一个，并且最后一个部分看起来像中间名缩写（以点号结尾）
+        if (
+            remainingNameParts.length > 1 &&
+            remainingNameParts[remainingNameParts.length - 1].endsWith('.')
+        ) {
+            result.MiddleName = remainingNameParts.pop();
+            result.MiddleName = result.MiddleName.charAt(0).toUpperCase() + result.MiddleName.slice(1);
+        }
+
+        // 处理剩余的作为 FirstName，统一缩写形式
+        let firstNameComponents = [];
+        remainingNameParts.forEach(part => {
+            if (part.length > 0) {
+                if (part.endsWith('.')) {
+                    // 已有缩写，如 'M.'
+                    firstNameComponents.push(part.charAt(0).toUpperCase() + '.');
+                } else {
+                    // 全名，转换为首字母加点
+                    firstNameComponents.push(part.charAt(0).toUpperCase() + '.');
+                }
+            }
+        });
+        result.FirstName = firstNameComponents.join(' ');
+    }
+
+    return result;
+}
+/**
+ * 将逗号分隔的作者字符串解析为结构化的作者对象列表。
+ *
+ * @param {string} authorsString - 逗号分隔的作者姓名字符串，
+ * 例如：'M. Aspelmeyer, T. J. Kippenberg, F. Marquardt,张三'。
+ * @returns {Array<object>} 一个包含作者对象的列表，每个对象具有 `chineseName`, `LastName`, `FirstName`, `MiddleName` 属性。
+ * 如果输入字符串为空或解析后无有效作者，则返回空数组。
+ */
+function formatAuthors(authorsString) {
+    const parsedAuthorsList = [];
+    if (!authorsString || authorsString.trim() === '') {
+        return parsedAuthorsList; // 返回空数组而不是“佚名”
+    }
+
+    // 分割作者字符串，去除空格，并过滤空字符串
+    const authorStrings = authorsString.split(',').map(s => s.trim()).filter(s => s !== '');
+
+    // 遍历每个作者字符串并进行解析
+    authorStrings.forEach(authorString => {
+        parsedAuthorsList.push(parseAuthor(authorString));
+    });
+
+    return parsedAuthorsList;
+}
+
 
 /**
  * 根据GB/T 7714标准格式化参考文献对象。
@@ -58,25 +201,57 @@ function formatAuthors(authors_list) {
  */
 function format_gbt7714_js(ref) {
     let parts = [];
-    const authors = formatAuthors(ref.authors);
     const title = ref.title || '无标题';
 
-    if (authors) {
-        parts.push(authors);
-        parts.push(".");
+    let displayedAuthors = [];
+    for (let i = 0; i < authors.length; i++) {
+        const author = authors[i];
+        if (author.chineseName) {
+            // 中文名直接使用原始中文名
+            displayedAuthors.push(author.chineseName);
+        } else {
+            // 英文名：姓在前，名（缩写）和中间名（缩写）在后，用逗号分隔
+            let englishNameParts = [];
+            englishNameParts.push(author.LastName); // 姓氏
+            englishNameParts.push(' ');
+
+            let initials = [];
+            if (author.FirstName) {
+                initials.push(author.FirstName);
+            }
+            if (author.MiddleName) {
+                initials.push(author.MiddleName);
+            }
+            // 将名和中间名缩写用空格连接
+            const initialsString = initials.join(' ');
+
+            // 如果有缩写，则添加逗号和缩写部分
+            if (initialsString) {
+                englishNameParts.push(initialsString);
+            }
+            displayedAuthors.push(englishNameParts.join(''));
+        }
+    }
+
+    let finalAuthorString = displayedAuthors.join(','); // 作者之间用全角逗号
+
+    if (finalAuthorString !== "") {
+        finalAuthorString += '.'; // 末尾加句号
+        parts.push(finalAuthorString);
     }
 
     let suffix = '';
     if (ref.ref_type === 'journal') {
         suffix = '[J]';
     } else if (ref.ref_type === 'conference') {
-        suffix = '[C]';
+        suffix = '[C]//';
     } else if (ref.ref_type === 'book') {
         suffix = '[M]';
     } else if (ref.ref_type === 'web') {
         suffix = '[EB/OL]';
     }
-    parts.push(`${title}${suffix}.`);
+    if (title)
+        parts.push(`${title}${suffix}.`);
 
     if (ref.ref_type === 'journal') {
         if (ref.venue) parts.push(`${ref.venue},`);
@@ -120,13 +295,49 @@ function format_gbt7714_js(ref) {
  */
 function format_apa_js(ref) {
     let parts = [];
-    const authors = formatAuthors(ref.authors);
     const year = ref.year ? `(${ref.year})` : '(n.d.)'; // 如果年份缺失，使用(n.d.)
     const title = ref.title || '无标题';
 
-    if (authors) parts.push(`${authors}.`);
-    parts.push(`${year}.`);
-    parts.push(`${title}.`);
+    let displayedAuthors = [];
+    for (let i = 0; i < authors.length; i++) {
+        const author = authors[i];
+
+        // 英文名：姓在前，名（缩写）和中间名（缩写）在后，用逗号分隔
+        let englishNameParts = [];
+
+        let initials = [];
+        if (author.FirstName) {
+            initials.push(author.FirstName);
+        }
+        if (author.MiddleName) {
+            initials.push(author.MiddleName);
+        }
+        // 将名和中间名缩写用空格连接
+        const initialsString = initials.join(' ');
+
+        // 如果有缩写，则添加逗号和缩写部分
+        if (initialsString) {
+            englishNameParts.push(initialsString);
+
+        }
+        englishNameParts.push(' ');
+        englishNameParts.push(author.LastName); // 姓氏
+
+        displayedAuthors.push(englishNameParts.join(''));
+    }
+    if(authors.length > 1) {
+        let lastAuthor = displayedAuthors.pop()
+        displayedAuthors.push('& ' + lastAuthor)
+    }
+
+    let finalAuthorString = displayedAuthors.join(',');
+    if(finalAuthorString)
+        parts.push(finalAuthorString);
+
+    if (year)
+        parts.push(`${year}.`);
+    if (title)
+        parts.push(`${title}.`);
 
     if (ref.ref_type === 'journal') {
         if (ref.venue) parts.push(`${ref.venue},`); // 期刊名斜体
@@ -144,7 +355,11 @@ function format_apa_js(ref) {
         if (ref.doi) parts.push(`https://doi.org/${ref.doi}`);
         else if (ref.url) parts.push(ref.url);
     } else if (ref.ref_type === 'book') {
-        if (ref.publisher) parts.push(`${ref.publisher}.`);
+        if (ref.pubplace && ref.publisher) {
+            parts.push(`${ref.pubplace}: ${ref.publisher}.`);
+        } else if (ref.publisher) {
+            parts.push(`${ref.publisher},`);
+        }
     } else if (ref.ref_type === 'web') {
         if (ref.url) parts.push(`Retrieved from ${ref.url}`);
     } else {
@@ -161,12 +376,49 @@ function format_apa_js(ref) {
  */
 function format_ieee_js(ref) {
     let parts = [];
-    const authors = formatAuthors(ref.authors);
     const title = ref.title || '无标题';
 
-    if (authors) parts.push(authors);
-    parts.push(",");
-    parts.push(`"${title}",`); // 标题用双引号包裹
+    let displayedAuthors = [];
+    for (let i = 0; i < authors.length; i++) {
+        const author = authors[i];
+
+        let englishNameParts = [];
+        englishNameParts.push(author.LastName); // 姓氏
+        englishNameParts.push(', ');
+
+        let initials = [];
+        if (author.FirstName) {
+            initials.push(author.FirstName);
+        }
+        if (author.MiddleName) {
+            initials.push(author.MiddleName);
+        }
+        // 将名和中间名缩写用空格连接
+        const initialsString = initials.join(' ');
+
+        // 如果有缩写，则添加逗号和缩写部分
+        if (initialsString) {
+            englishNameParts.push(initialsString);
+        }
+
+        displayedAuthors.push(englishNameParts.join(''));
+    }
+
+    if(authors.length > 1) {
+        let lastAuthor = displayedAuthors.pop();
+        displayedAuthors.push('and ' + lastAuthor);
+    }
+
+    let finalAuthorString = displayedAuthors.join(',');
+
+    if(finalAuthorString) {
+        finalAuthorString += ',';
+        parts.push(finalAuthorString);
+    }
+
+
+    if (title)
+        parts.push(`"${title}",`); // 标题用双引号包裹
 
     if (ref.ref_type === 'journal') {
         if (ref.venue) parts.push(`${ref.venue},`);
@@ -210,6 +462,8 @@ function format_ieee_js(ref) {
  * @returns {string} 格式化后的参考文献字符串。
  */
 function formatReference(ref, style) {
+    authors = formatAuthors(ref.authors);
+    console.log(authors);
     switch (style) {
         case 'gbt7714':
             return format_gbt7714_js(ref);

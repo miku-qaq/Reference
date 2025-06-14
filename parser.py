@@ -2,6 +2,7 @@ import requests
 from typing import List
 import openai
 import json  # 添加json模块
+from pypinyin import pinyin, Style
 
 # 设置 DeepSeek API
 openai.api_key = "sk-4a9e01274c4f48dbafa94c2c04b32a30"  # 请替换成您自己的有效API Key
@@ -35,7 +36,7 @@ class Reference:
         return {
             'raw': self.raw,
             # 将作者字符串（如 "Smith J., Chen L."）分割成列表
-            'authors': self.authors.split(', ') if isinstance(self.authors, str) and self.authors else [],
+            'authors': self.authors,
             'year': self.year,
             'title': self.title,
             'venue': self.venue,
@@ -61,7 +62,11 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
     """
     prompt = f"""
 你是一个文献解析助手，请从下面这条参考文献中提取以下字段，并返回标准 JSON 格式：
-- authors（作者列表，用逗号分隔）
+- authors（作者列表，用逗号分隔，格式为"J. K. Smith,张三,F. Chen"。
+英文名保证格式姓（Last Name）在后，名（First Name 和 Middle Name）在前，
+First Name 和 Middle Name采用首字符大写加.的格式。
+中文名保证原中文名不变，
+作者名过多时可能会用"等\et al"表示，注意不要加进去）
 - year（年份）
 - title（标题）
 - venue（期刊或会议名称）
@@ -70,10 +75,9 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
 - pages（页码）
 - pubplace（出版地）
 - publisher（出版社）
-- access_date（访问日期）
-- url（链接）
-- ref_type（文献类型，如 journal/book/web/conference）
-- doi（数字对象唯一标识符）
+- url（网页链接https开头的）
+- ref_type（文献类型，取值只有journal/book/web/conference/unknown这几种）
+- doi（数字对象唯一标识符，如果没有则为空字符串）
 
 参考文献：
 {raw_reference}
@@ -92,24 +96,39 @@ def extract_metadata_deepseek(raw_reference: str) -> dict:
 
         # 正确访问响应对象的方式（使用属性而不是下标）
         reply = response.choices[0].message.content
-
+        print(json.loads(reply))
         return json.loads(reply)  # 使用json模块解析
     except Exception as e:
         print(f"DeepSeek 解析失败：{e}")
         return {}
 
+def is_chinese_name(name):
+    """判断名字是否为中文"""
+    return all('\u4e00' <= char <= '\u9fff' for char in name.strip())
 
-def fetch_crossref_metadata(title='', authors='', venue='', publisher='', year='') -> dict:
+def convert_to_pinyin(name):
+    """将中文名转为拼音，首字母大写"""
+    if not is_chinese_name(name):
+        return name  # 如果不是中文，原样返回
+
+    # 拼音分词 + 首字母大写
+    py_parts = pinyin(name, style=Style.NORMAL)
+    capitalized = [part[0].capitalize() for part in py_parts]
+    return ' '.join(capitalized)
+
+
+
+def fetch_crossref_metadata(title='',authors='', venue='', year='') -> dict:
     try:
         params = {}
         if title:
             params['query.title'] = title
         if authors:
-            params['query.author'] = authors
+            author = authors.split(',')[0]
+            author = convert_to_pinyin(author)
+            params['query.author'] = author
         if venue:
             params['query.container-title'] = venue
-        if publisher:
-            params['query.publisher-name'] = publisher
         if year:
             params['filter'] = f"from-pub-date:{year},until-pub-date:{year}"
 
@@ -147,21 +166,33 @@ def parse_reference(raw: str) -> Reference:
         return ref
 
     # 如果 DeepSeek 解析失败，则使用 CrossRef API 进行查询
+
     if ref.doi:
+        has_doi = True
         cr_meta = fetch_crossref_by_doi(ref.doi)
+        if cr_meta:
+            # 查询
+            has_doi = False
+            cr_meta = fetch_crossref_metadata(
+                title=ref.title,
+                authors=ref.authors,
+                venue=ref.venue,
+                year=ref.year
+            )
+
     else:
         #查询
+        has_doi = False
         cr_meta = fetch_crossref_metadata(
             title=ref.title,
             authors=ref.authors,
             venue=ref.venue,
-            publisher=ref.publisher,
             year=ref.year
         )
 
     if cr_meta:
         # DOI 直接是字符串，不要当列表处理
-        if not ref.doi:
+        if not has_doi:
             ref.doi = cr_meta.get('DOI', '')
 
         # 作者列表正常拼接
@@ -208,6 +239,7 @@ def parse_references_bulk(text_block: str) -> List[Reference]:
     for line in lines:
         try:
             results.append(parse_reference(line))
-        except Exception:
+        except Exception as e:
+            print(f"解析失败：{e}")
             results.append(Reference(line))
     return results

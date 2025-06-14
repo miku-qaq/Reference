@@ -58,7 +58,6 @@ def api_parse_references():
         # 调用 parser.py 中导入的实际解析函数
         # parse_references_bulk 函数应返回 Reference 对象的列表
         refs_objects = parse_references_bulk(raw_input_content)
-
         # 用于存储去重后的参考文献字典（供前端使用）
         temp_parsed_data = []
         # 用于记录已处理的参考文献的唯一键，以便去重
@@ -70,7 +69,6 @@ def api_parse_references():
             # 确保 authors 在 Reference 对象中是字符串形式，以便构建键
             author_key = r_obj.authors if isinstance(r_obj.authors, str) else ', '.join(r_obj.authors)
             key = (author_key, r_obj.year, r_obj.title)
-
             # 检查当前参考文献是否已经处理过（去重逻辑）
             if key in seen_keys:
                 duplicates_found = True  # 标记检测到重复
@@ -88,6 +86,7 @@ def api_parse_references():
         parsed_references_dicts = []
         duplicates_found = False
 
+    print("处理完成！")
     # --- 5. 返回 JSON 格式的响应 ---
     # jsonify 会自动将Python字典转换为JSON字符串，并设置HTTP响应头 Content-Type: application/json
     return jsonify({
